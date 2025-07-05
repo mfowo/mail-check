@@ -86,3 +86,87 @@ function getOrCreateGmailLabel(labelName) {
   }
   return label;
 }
+
+/**
+ * スプレッドシートの指定範囲に未記入セルがあるかチェックし、Discordに通知します。
+ * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet - チェックするシートオブジェクト。
+ */
+function checkAndNotifyMissingData(sheet) {
+  const lastRow = sheet.getLastRow();
+  const startRow = 2; 
+
+  // A列にデータがない場合は、チェックする行がないと判断します。
+  if (lastRow < startRow) {
+    Logger.log(`A列にデータがありません。チェック範囲: E${startRow}:A${lastRow} は無効です。`);
+    // 未記入のデータがないと判断し、通知は行いません
+    return;
+  }
+  
+  const CHECK_RANGE = `E${startRow}:E${lastRow}`; 
+  const range = sheet.getRange(CHECK_RANGE);
+  const values = range.getValues();
+
+  let missingDataFound = false;
+  let missingCells = [];
+
+  for (let r = 0; r < values.length; r++) {
+    for (let c = 0; c < values[r].length; c++) {
+      // セルが空か、空白文字のみで構成されているかをチェック
+      if (values[r][c] === "" || String(values[r][c]).trim() === "") {
+        missingDataFound = true;
+        // A1表記でセルの位置を取得
+        // getRow()とgetColumn()は範囲の左上のセルの行番号と列番号を返します。
+        // rとcはそこからの相対位置なので、足し合わせます。
+        const row = range.getRow() + r;
+        const column = range.getColumn() + c;
+        const cellAddress = sheet.getRange(row, column).getA1Notation();
+        missingCells.push(cellAddress);
+      }
+    }
+  }
+
+  const SPREADSHEET_URL = PropertiesService.getScriptProperties().getProperty('SPREADSHEET_URL');
+  if (missingDataFound) {
+    const spreadsheet = sheet.getParent(); 
+    const message = `スプレッドシート「${spreadsheet.getName()}」のシート「${sheet.getName()}」に未記入のセルがあります。\n\n未記入のセル: ${missingCells.join(", ")}\n\n${SPREADSHEET_URL}`; 
+    sendDiscordMessage(message);
+    Logger.log(message);
+  } else {
+    const spreadsheet = sheet.getParent();
+    const message = `スプレッドシート「${spreadsheet.getName()}」のシート「${sheet.getName()}」に未記入のセルはありませんでした。`;
+    Logger.log(message);
+  }
+}
+
+/**
+ * Discord Webhookにメッセージを送信します。
+ * DISCORD_WEBHOOK_URLは呼び出し元（main.gsなど）で定義されていることを前提とします。
+ * @param {string} message - Discordに送信するメッセージ。
+ */
+function sendDiscordMessage(message) {
+
+  const DISCORD_WEBHOOK_URL  = PropertiesService.getScriptProperties().getProperty('DISCORD_WEBHOOK_URL');
+
+  const payload = {
+    content: message,
+  };
+
+  const options = {
+    method: "post",
+    contentType: "application/json",
+    payload: JSON.stringify(payload),
+    muteHttpExceptions: true // エラー時に例外をスローせず、レスポンスでエラー内容を取得できるようにする
+  };
+
+  try {
+    const response = UrlFetchApp.fetch(DISCORD_WEBHOOK_URL, options);
+    const responseCode = response.getResponseCode();
+    if (responseCode >= 200 && responseCode < 300) {
+      Logger.log("Discordにメッセージを送信しました。");
+    } else {
+      Logger.log(`Discordへのメッセージ送信に失敗しました。ステータスコード: ${responseCode}, レスポンス: ${response.getContentText()}`);
+    }
+  } catch (e) {
+    Logger.log(`Discordへのメッセージ送信中にエラーが発生しました: ${e.message}`);
+  }
+}

@@ -1,11 +1,8 @@
-// Code.gs ファイル
-
 function main() {
   // スクリプトプロパティの取得
   const SPREADSHEET_ID = PropertiesService.getScriptProperties().getProperty('SPREADSHEET_ID');
   const SHEET_ID = PropertiesService.getScriptProperties().getProperty('SHEET_ID');
   const MAILING_LIST_ADDRESS = PropertiesService.getScriptProperties().getProperty('MAILING_LIST_ADDRESS');
-  const DISCORD_WEBHOOK_URL  = PropertiesService.getScriptProperties().getProperty('DISCORD_WEBHOOK_URL');
 
   // プロパティのバリデーション
   if (!SPREADSHEET_ID) {
@@ -45,4 +42,7 @@ function main() {
 
   // Gmailメッセージを処理してスプレッドシートに書き込み、ラベルに移動
   processGmailMessages(query, sheet, mlLabel);
+
+  // Discordにメッセージを送信する
+  checkAndNotifyMissingData(sheet); 
 }
